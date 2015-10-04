@@ -1,74 +1,90 @@
 package main
 
 import (
-	"encoding/json"
+	"bufio"
 	"fmt"
 	"log"
+	"net"
 	"net/rpc/jsonrpc"
 	"os"
+	"strconv"
 )
 
-type StockRequest struct {
-	StockSymbolAndPercentage string  `json:"stockSymbolAndPercentage"`
-	Budget                   float32 `json:"budget"`
+type Args struct {
+	StockSymbolAndPercentage string
+	UserBudget               float64
 }
 
-type StockResponse struct {
-	TradeId        uint32  `json:"tradeid"`
-	Stocks         string  `json:"stocks"`
-	UnvestedAmount float64 `json:"unvestedAmount"`
+type Quote struct {
+	Stocks string `json:"stocksymbol"`
+
+	UnvestedAmount float64 `json:"stockprice"`
+	TradeId        int     `json:"id"`
 }
 
-type PortfolioRequest struct {
-	Tradeid uint32 `json:"tradeid"`
+type Id struct {
+	TradeId int `json:"id"`
 }
 
-type PortfolioResponse struct {
-	Stocks             string  `json:"stocks"`
-	CurrentMarketValue float64 `json:"currentMarketValue"`
-	UnvestedAmount     float64 `json:"unvestedAmount"`
+type UpdQuote struct {
+	Stocks         string  `json:"stocksymbol"`
+	UnvestedAmount float64 `json:"stockprice"`
 }
-
-var stockRequest StockRequest
-var portfolioRequest PortfolioRequest
 
 func main() {
-	if len(os.Args) != 4 {
-		fmt.Println("Usage: ", os.Args[0], "server:port")
-		log.Fatal(1)
-	}
-	service := os.Args[1]
 
-	client, err := jsonrpc.Dial("tcp", service)
+	client, err := net.Dial("tcp", "127.0.0.1:1234")
 	if err != nil {
 		log.Fatal("dialing:", err)
 	}
+	reader := bufio.NewReader(os.Stdin)
 
-	if os.Args[2] == "buy" {
-		fmt.Printf("Buying Stocks..\n ")
-		content := []byte(os.Args[3])
-		err = json.Unmarshal(content, &stockRequest)
-		var reply StockResponse
-		err = client.Call("StockMarket.BuyStock", stockRequest, &reply)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("\n%+v\n", reply)
+	fmt.Print("Enter Stock Symbol: ")
+	StockSymbolAndPercentage, _ := reader.ReadString('\n')
+	fmt.Println(StockSymbolAndPercentage)
+	fmt.Print("Enter budget: ")
+	var UserBudget float64
+	fmt.Scan(&UserBudget)
 
-	} else if os.Args[2] == "checkPortfolio" {
-		fmt.Printf("Checking Portfolio.. \n")
-		content := []byte(os.Args[3])
-		err = json.Unmarshal(content, &portfolioRequest)
-		var reply PortfolioResponse
-		//tradeId,_ := strconv.ParseInt(os.Args[3],10,64)
-		err = client.Call("StockMarket.CheckPortfolio", portfolioRequest, &reply)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("\n%+v\n", reply)
+	args := Args{StockSymbolAndPercentage, UserBudget}
 
-	} else {
-
-		fmt.Printf("Invalid Input")
+	var quo Quote
+	c := jsonrpc.NewClient(client)
+	err = c.Call("StockCalc.StockPrice", args, &quo)
+	if err != nil {
+		log.Fatal("arith error:", err)
 	}
+	f, _ := strconv.ParseFloat("quo.Stocks", 64)
+
+	fmt.Println("TradeID:", quo.TradeId)
+	fmt.Println("Stocks", quo.Stocks)
+	fmt.Println("Remaining amount", quo.UnvestedAmount)
+
+	client, err = net.Dial("tcp", "127.0.0.1:1234")
+	if err != nil {
+		log.Fatal("dialing:", err)
+	}
+	fmt.Println("\nEnter Trade Id")
+	var s int
+	fmt.Scan(&s)
+	if s == 1 {
+
+		args := Args{StockSymbolAndPercentage, UserBudget}
+
+		var quo Quote
+
+		c := jsonrpc.NewClient(client)
+		err = c.Call("StockCalc.StockPrice", args, &quo)
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+
+		x, _ := strconv.ParseFloat("quo.Stocks", 64)
+		y := x - f
+		fmt.Println("Stocks:", quo.Stocks)
+		fmt.Println("Profit/Loss per stock:", y)
+		fmt.Println("Uninvested amount:", quo.UnvestedAmount)
+
+	}
+
 }
